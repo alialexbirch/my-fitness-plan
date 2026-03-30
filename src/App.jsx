@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+no import { useState, useRef, useEffect } from "react";
 
 const PROFILE = {
   goals: ["Cardio / Endurance", "Strength", "Flexibility / Mobility"],
@@ -274,4 +274,4 @@ RULES:
       </div>
     </div>
   );
-} 
+}
