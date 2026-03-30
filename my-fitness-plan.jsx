@@ -10,6 +10,19 @@ const PROFILE = {
 
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 
+const PELOTON_INSTRUCTORS = [
+  "Emma Lovewell","Cody Rigsby","Alex Toussaint","Jess King","Denis Morton",
+  "Matt Wilpers","Robin Arzón","Kendall Toole","Christine D'Ercole","Becs Gentry",
+  "Adrian Williams","Andy Speer","Chase Tucker","Kristin McGee","Anna Greenberg",
+  "Hannah Frankson",
+];
+
+const PILATESOLOGY_INSTRUCTORS = [
+  "Niedra Gabriel","Brooke Siler","Kara Wily","Rael Isacowitz",
+  "Blossom Leilani Crawford","Amy Taylor Alpers","Rachel Taylor Segel",
+  "Cara Reeser","Kathryn Ross-Nash","Michele Larsson",
+];
+
 const HOME_SESSIONS = [
   { id:"h1", provider:"Peloton", type:"Cycling", title:"20 Min Low Impact Ride", instructor:"Emma Lovewell", duration:20, intensity:"Easy", location:"home", icon:"🚴", color:"#2563eb", bg:"#eff6ff", border:"#bfdbfe" },
   { id:"h2", provider:"Peloton", type:"Cycling", title:"30 Min Beginner Ride", instructor:"Jess King", duration:30, intensity:"Easy", location:"home", icon:"🚴", color:"#2563eb", bg:"#eff6ff", border:"#bfdbfe" },
@@ -36,6 +49,13 @@ const intensityColor = { Easy:"#16a34a", Medium:"#d97706", Hard:"#dc2626" };
 const intensityBg = { Easy:"#dcfce7", Medium:"#fef9c3", Hard:"#fee2e2" };
 
 function isAwayDay(day) { return PROFILE.awayDays.includes(day); }
+
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem("fitnessPrefs") || "{}"); } catch { return {}; }
+}
+function savePrefs(prefs) {
+  try { localStorage.setItem("fitnessPrefs", JSON.stringify(prefs)); } catch {}
+}
 
 function SessionPill({ s, onRemove }) {
   return (
@@ -80,22 +100,25 @@ function DayColumn({ day, sessions, onRemove, onDrop }) {
   );
 }
 
-function LibraryCard({ s }) {
+function LibraryCard({ s, isFavInstructor }) {
   const [dragging, setDragging] = useState(false);
   return (
     <div
       draggable
       onDragStart={e=>{ e.dataTransfer.setData("sessionId",s.id); setDragging(true); }}
       onDragEnd={()=>setDragging(false)}
-      style={{ background:dragging?s.bg:"#ffffff", border:`1.5px solid ${dragging?s.border:"#f3f4f6"}`, borderRadius:10, padding:"11px 13px", cursor:"grab", display:"flex", alignItems:"center", gap:10, transition:"all 0.15s", opacity:dragging?0.6:1, userSelect:"none", boxShadow:dragging?"none":"0 1px 3px rgba(0,0,0,0.06)" }}
+      style={{ background:dragging?s.bg:"#ffffff", border:`1.5px solid ${dragging?s.border:isFavInstructor?s.border:"#f3f4f6"}`, borderRadius:10, padding:"11px 13px", cursor:"grab", display:"flex", alignItems:"center", gap:10, transition:"all 0.15s", opacity:dragging?0.6:1, userSelect:"none", boxShadow:dragging?"none":isFavInstructor?"0 2px 8px rgba(0,0,0,0.08)":"0 1px 3px rgba(0,0,0,0.06)" }}
       onMouseEnter={e=>{ e.currentTarget.style.borderColor=s.border; e.currentTarget.style.background=s.bg; e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)"; }}
-      onMouseLeave={e=>{ if(!dragging){ e.currentTarget.style.borderColor="#f3f4f6"; e.currentTarget.style.background="#ffffff"; e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.06)"; }}}
+      onMouseLeave={e=>{ if(!dragging){ e.currentTarget.style.borderColor=isFavInstructor?s.border:"#f3f4f6"; e.currentTarget.style.background="#ffffff"; e.currentTarget.style.boxShadow=isFavInstructor?"0 2px 8px rgba(0,0,0,0.08)":"0 1px 3px rgba(0,0,0,0.06)"; }}}
     >
       <span style={{ fontSize:22, flexShrink:0 }}>{s.icon}</span>
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ fontSize:11, fontWeight:700, color:s.color, fontFamily:"'Outfit',sans-serif" }}>{s.provider} · {s.type}</div>
         <div style={{ fontSize:12, color:"#374151", marginTop:2, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", fontWeight:500 }}>{s.title}</div>
-        <div style={{ fontSize:10, color:"#9ca3af", marginTop:2 }}>{s.instructor} · {s.duration}min</div>
+        <div style={{ fontSize:10, color:"#9ca3af", marginTop:2 }}>
+          {isFavInstructor && <span style={{ color:s.color, fontWeight:700 }}>★ </span>}
+          {s.instructor} · {s.duration}min
+        </div>
       </div>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4, flexShrink:0 }}>
         <span style={{ fontSize:9, fontWeight:700, color:intensityColor[s.intensity], background:intensityBg[s.intensity], padding:"2px 7px", borderRadius:4 }}>{s.intensity.toUpperCase()}</span>
@@ -105,15 +128,141 @@ function LibraryCard({ s }) {
   );
 }
 
+function PreferencesPanel({ prefs, onSave, onClose }) {
+  const [localPrefs, setLocalPrefs] = useState(prefs);
+  const [newInstructor, setNewInstructor] = useState("");
+
+  function toggleInstructor(name, provider) {
+    const key = provider === "Peloton" ? "pelotonFavs" : "pilatesologyFavs";
+    const current = localPrefs[key] || [];
+    const updated = current.includes(name) ? current.filter(n=>n!==name) : [...current, name];
+    setLocalPrefs(p=>({...p, [key]: updated}));
+  }
+
+  function addCustomInstructor() {
+    if (!newInstructor.trim()) return;
+    const current = localPrefs.customInstructors || [];
+    if (!current.includes(newInstructor.trim())) {
+      setLocalPrefs(p=>({...p, customInstructors: [...current, newInstructor.trim()]}));
+    }
+    setNewInstructor("");
+  }
+
+  function removeCustom(name) {
+    setLocalPrefs(p=>({...p, customInstructors: (p.customInstructors||[]).filter(n=>n!==name)}));
+  }
+
+  const pelotonFavs = localPrefs.pelotonFavs || [];
+  const pilatesologyFavs = localPrefs.pilatesologyFavs || [];
+  const customInstructors = localPrefs.customInstructors || [];
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.3)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:"#ffffff", borderRadius:16, width:540, maxHeight:"80vh", overflow:"hidden", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px rgba(0,0,0,0.15)" }}>
+        {/* Header */}
+        <div style={{ padding:"20px 24px", borderBottom:"1px solid #f3f4f6", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#111827" }}>My Preferences</div>
+            <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>Saved permanently · used by your AI coach</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer" }}>✕</button>
+        </div>
+
+        <div style={{ overflowY:"auto", padding:"20px 24px" }}>
+
+          {/* Peloton favourites */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:"#2563eb", marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
+              🚴 Favourite Peloton Instructors
+            </div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {PELOTON_INSTRUCTORS.map(name=>{
+                const active = pelotonFavs.includes(name);
+                return (
+                  <button key={name} onClick={()=>toggleInstructor(name,"Peloton")} style={{ background:active?"#eff6ff":"#f9fafb", border:`1px solid ${active?"#bfdbfe":"#e5e7eb"}`, color:active?"#2563eb":"#6b7280", borderRadius:20, padding:"5px 12px", fontSize:11, cursor:"pointer", fontFamily:"'Outfit',sans-serif", fontWeight:active?700:400, transition:"all 0.15s" }}>
+                    {active ? "★ " : ""}{name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Pilatesology favourites */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:"#059669", marginBottom:10 }}>
+              🌿 Favourite Pilatesology Instructors
+            </div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {PILATESOLOGY_INSTRUCTORS.map(name=>{
+                const active = pilatesologyFavs.includes(name);
+                return (
+                  <button key={name} onClick={()=>toggleInstructor(name,"Pilatesology")} style={{ background:active?"#ecfdf5":"#f9fafb", border:`1px solid ${active?"#a7f3d0":"#e5e7eb"}`, color:active?"#059669":"#6b7280", borderRadius:20, padding:"5px 12px", fontSize:11, cursor:"pointer", fontFamily:"'Outfit',sans-serif", fontWeight:active?700:400, transition:"all 0.15s" }}>
+                    {active ? "★ " : ""}{name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Custom instructors */}
+          <div style={{ marginBottom:8 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:"#6b7280", marginBottom:10 }}>
+              ✚ Add an instructor not listed above
+            </div>
+            <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+              <input value={newInstructor} onChange={e=>setNewInstructor(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addCustomInstructor()} placeholder="Type instructor name…"
+                style={{ flex:1, background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 12px", fontSize:12, outline:"none", fontFamily:"'Outfit',sans-serif", color:"#111827" }}/>
+              <button onClick={addCustomInstructor} style={{ background:"#059669", border:"none", color:"#ffffff", borderRadius:8, padding:"8px 16px", fontSize:12, cursor:"pointer", fontWeight:700, fontFamily:"'Outfit',sans-serif" }}>Add</button>
+            </div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {customInstructors.map(name=>(
+                <span key={name} style={{ background:"#f3f4f6", border:"1px solid #e5e7eb", borderRadius:20, padding:"4px 10px", fontSize:11, color:"#374151", display:"flex", alignItems:"center", gap:6 }}>
+                  {name}
+                  <button onClick={()=>removeCustom(name)} style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:11, padding:0, lineHeight:1 }}>✕</button>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"16px 24px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <button onClick={onClose} style={{ background:"transparent", border:"1px solid #e5e7eb", color:"#6b7280", borderRadius:8, padding:"9px 20px", fontSize:12, cursor:"pointer", fontFamily:"'Outfit',sans-serif" }}>Cancel</button>
+          <button onClick={()=>{ onSave(localPrefs); onClose(); }} style={{ background:"#059669", border:"none", color:"#ffffff", borderRadius:8, padding:"9px 20px", fontSize:12, cursor:"pointer", fontWeight:700, fontFamily:"'Outfit',sans-serif" }}>Save Preferences</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FitnessPlan() {
   const [plan, setPlan] = useState({});
   const [tab, setTab] = useState("home");
-  const [aiMessages, setAiMessages] = useState([{ role:"assistant", content:`Hi! I'm your personal coach 👋\n\nI've got your profile loaded — returning to fitness after 2 years, 4 days/week, home Mon/Fri/Sat/Sun and travelling Tue–Thu.\n\nYour equipment at home: Peloton bike, treadmill, weights and your Gratz Half Cadillac.\n\nTap "Build my week 🗓" to get a personalised plan, or drag any class from the library below onto a day.` }]);
+  const [coachOpen, setCoachOpen] = useState(true);
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [prefs, setPrefs] = useState(loadPrefs);
+  const [aiMessages, setAiMessages] = useState([{ role:"assistant", content:`Hi! I'm your personal coach 👋\n\nI've got your profile loaded — returning to fitness after 2 years, 4 days/week, home Mon/Fri/Sat/Sun and travelling Tue–Thu.\n\nYour equipment at home: Peloton bike, treadmill, weights and your Gratz Half Cadillac.\n\nTap "Build my week 🗓" to get a personalised plan, or set your favourite instructors in ⚙ Preferences first!` }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const chatRef = useRef(null);
 
   useEffect(() => { if(chatRef.current) chatRef.current.scrollTop=chatRef.current.scrollHeight; }, [aiMessages, loading]);
+
+  function handleSavePrefs(newPrefs) {
+    setPrefs(newPrefs);
+    savePrefs(newPrefs);
+    // Notify coach
+    const pelotonFavs = newPrefs.pelotonFavs || [];
+    const pilatesologyFavs = newPrefs.pilatesologyFavs || [];
+    const custom = newPrefs.customInstructors || [];
+    const allFavs = [...pelotonFavs, ...pilatesologyFavs, ...custom];
+    if (allFavs.length > 0) {
+      setAiMessages(prev=>[...prev, {
+        role:"assistant",
+        content:`Great, I've saved your preferences! ✓\n\nFavourite instructors saved:\n${pelotonFavs.length>0?"🚴 Peloton: "+pelotonFavs.join(", ")+"\n":""}${pilatesologyFavs.length>0?"🌿 Pilatesology: "+pilatesologyFavs.join(", ")+"\n":""}${custom.length>0?"✚ Others: "+custom.join(", "):""}${"\n\nI'll prioritise these instructors in all my recommendations from now on."}`
+      }]);
+    }
+  }
 
   function dropSession(sessionId, day) {
     const s = ALL_SESSIONS.find(x=>x.id===sessionId);
@@ -127,6 +276,8 @@ export default function FitnessPlan() {
   const totalMins = Object.values(plan).flat().reduce((a,s)=>a+s.duration,0);
   const totalSessions = Object.values(plan).flat().length;
 
+  const allFavInstructors = [...(prefs.pelotonFavs||[]), ...(prefs.pilatesologyFavs||[]), ...(prefs.customInstructors||[])];
+
   async function sendMessage(overrideText) {
     const text = overrideText||input;
     if(!text.trim()||loading) return;
@@ -137,6 +288,9 @@ export default function FitnessPlan() {
     setLoading(true);
 
     const planSummary = Object.entries(plan).map(([day,sessions])=>`${day}: ${sessions.map(s=>`${s.title} (${s.duration}min, ${s.intensity})`).join(", ")}`).join("\n")||"Empty — nothing planned yet.";
+    const favInstructorNote = allFavInstructors.length > 0
+      ? `FAVOURITE INSTRUCTORS (prioritise these): ${allFavInstructors.join(", ")}`
+      : "No favourite instructors set yet.";
 
     const system = `You are a warm, encouraging personal fitness coach. The user is returning to exercise after a 2-year break.
 
@@ -146,6 +300,7 @@ USER PROFILE:
 - Home days (Mon, Fri, Sat, Sun): Peloton bike, treadmill, weights, Gratz Half Cadillac Pilates machine
 - Travel days (Tue, Wed, Thu): mat/bodyweight only in hotel room
 - Fitness level: Rebuilding gently — avoid overloading
+- ${favInstructorNote}
 
 AVAILABLE HOME SESSIONS:
 ${HOME_SESSIONS.map(s=>`- "${s.title}" by ${s.instructor} (${s.provider}, ${s.type}, ${s.duration}min, ${s.intensity})`).join("\n")}
@@ -158,6 +313,7 @@ ${planSummary}
 
 RULES:
 - Only recommend sessions from the lists above — use exact titles
+- When favourite instructors are set, prioritise their sessions first
 - Home sessions only on Mon/Fri/Sat/Sun; travel sessions only on Tue/Wed/Thu
 - Since they're returning after 2 years, start easy — mostly Easy intensity, max 1 Medium per week for now
 - 4 workout days, 3 rest days
@@ -165,7 +321,7 @@ RULES:
 - Mention they can also drag-and-drop sessions manually.`;
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,system,messages:newMsgs.map(m=>({role:m.role,content:m.content}))})});
+      const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:900,system,messages:newMsgs.map(m=>({role:m.role,content:m.content}))})});
       const data = await res.json();
       const reply = data.content?.map(b=>b.text||"").join("")||"Sorry, something went wrong.";
       setAiMessages(prev=>[...prev,{role:"assistant",content:reply}]);
@@ -192,6 +348,8 @@ RULES:
     <div style={{ minHeight:"100vh", background:"#f9fafb", color:"#111827", fontFamily:"'Outfit',sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono&display=swap" rel="stylesheet"/>
 
+      {prefsOpen && <PreferencesPanel prefs={prefs} onSave={handleSavePrefs} onClose={()=>setPrefsOpen(false)}/>}
+
       {/* TOP BAR */}
       <div style={{ background:"#ffffff", borderBottom:"1px solid #f3f4f6", padding:"16px 28px", display:"flex", alignItems:"center", justifyContent:"space-between", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
         <div>
@@ -205,18 +363,24 @@ RULES:
               <div style={{ fontSize:9, color:"#9ca3af", letterSpacing:2 }}>{label.toUpperCase()}</div>
             </div>
           ))}
+          <button onClick={()=>setPrefsOpen(true)} style={{ background: allFavInstructors.length>0?"#f0fdf4":"transparent", border:`1px solid ${allFavInstructors.length>0?"#86efac":"#e5e7eb"}`, color:allFavInstructors.length>0?"#15803d":"#9ca3af", borderRadius:8, padding:"8px 14px", fontSize:11, cursor:"pointer", fontFamily:"'Outfit',sans-serif", transition:"all 0.15s" }}>
+            ⚙ Preferences{allFavInstructors.length>0?` (${allFavInstructors.length} favs)`:""}
+          </button>
           <button onClick={clearPlan} style={{ background:"transparent", border:"1px solid #e5e7eb", color:"#9ca3af", borderRadius:8, padding:"8px 14px", fontSize:11, cursor:"pointer", fontFamily:"'Outfit',sans-serif", transition:"all 0.15s" }}
             onMouseEnter={e=>{e.currentTarget.style.color="#ef4444";e.currentTarget.style.borderColor="#fca5a5";}}
             onMouseLeave={e=>{e.currentTarget.style.color="#9ca3af";e.currentTarget.style.borderColor="#e5e7eb";}}>
             Clear week
           </button>
+          <button onClick={()=>setCoachOpen(o=>!o)} style={{ background:coachOpen?"#f0fdf4":"transparent", border:`1px solid ${coachOpen?"#86efac":"#e5e7eb"}`, color:coachOpen?"#15803d":"#9ca3af", borderRadius:8, padding:"8px 14px", fontSize:11, cursor:"pointer", fontFamily:"'Outfit',sans-serif", transition:"all 0.15s" }}>
+            {coachOpen?"Hide Coach ✕":"✦ AI Coach"}
+          </button>
         </div>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 300px", gap:0, height:"calc(100vh - 73px)" }}>
+      <div style={{ display:"grid", gridTemplateColumns:coachOpen?"1fr 300px":"1fr", gap:0, height:"calc(100vh - 73px)" }}>
 
         {/* LEFT */}
-        <div style={{ overflowY:"auto", padding:"24px 24px 24px 28px", borderRight:"1px solid #f3f4f6" }}>
+        <div style={{ overflowY:"auto", padding:"24px 24px 24px 28px", borderRight:coachOpen?"1px solid #f3f4f6":"none" }}>
           <div style={{ display:"flex", gap:16, marginBottom:14, alignItems:"center" }}>
             <span style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#9ca3af", letterSpacing:3 }}>THIS WEEK</span>
             <span style={{ fontSize:10, color:"#6b7280" }}>🏠 Home: Mon, Fri, Sat, Sun</span>
@@ -230,7 +394,9 @@ RULES:
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
               <div>
                 <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, letterSpacing:3, color:"#9ca3af" }}>SESSION LIBRARY</div>
-                <div style={{ fontSize:11, color:"#6b7280", marginTop:3 }}>Drag any session onto a day above</div>
+                <div style={{ fontSize:11, color:"#6b7280", marginTop:3 }}>
+                  Drag any session onto a day above{allFavInstructors.length>0?" · ★ = favourite instructor":""}
+                </div>
               </div>
               <div style={{ display:"flex", gap:6 }}>
                 {[["home","🏠 Home"],["travel","✈ Travel"]].map(([id,label])=>(
@@ -239,16 +405,26 @@ RULES:
               </div>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:8 }}>
-              {librarySessions.map(s=><LibraryCard key={s.id} s={s}/>)}
+              {librarySessions
+                .slice()
+                .sort((a,b)=>{
+                  const aFav = allFavInstructors.includes(a.instructor)?1:0;
+                  const bFav = allFavInstructors.includes(b.instructor)?1:0;
+                  return bFav-aFav;
+                })
+                .map(s=><LibraryCard key={s.id} s={s} isFavInstructor={allFavInstructors.includes(s.instructor)}/>)
+              }
             </div>
           </div>
         </div>
 
         {/* RIGHT: AI Coach */}
-        <div style={{ display:"flex", flexDirection:"column", background:"#ffffff" }}>
+        {coachOpen && <div style={{ display:"flex", flexDirection:"column", background:"#ffffff" }}>
           <div style={{ padding:"16px 18px", borderBottom:"1px solid #f3f4f6" }}>
             <div style={{ fontSize:13, fontWeight:700, color:"#111827" }}>✦ Your AI Coach</div>
-            <div style={{ fontSize:10, color:"#9ca3af", marginTop:2 }}>Powered by Claude · knows your equipment & schedule</div>
+            <div style={{ fontSize:10, color:"#9ca3af", marginTop:2 }}>
+              {allFavInstructors.length>0 ? `★ Prioritising: ${allFavInstructors.slice(0,2).join(", ")}${allFavInstructors.length>2?` +${allFavInstructors.length-2} more`:""}` : "Set favourites in ⚙ Preferences"}
+            </div>
           </div>
           <div style={{ padding:"12px 16px", borderBottom:"1px solid #f9fafb", display:"flex", flexWrap:"wrap", gap:6 }}>
             {["Build my week 🗓","Start easy this week","What should I do today?","How long should sessions be?"].map(q=>(
@@ -270,7 +446,7 @@ RULES:
               style={{ flex:1, background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:10, padding:"9px 13px", color:"#111827", fontSize:12, outline:"none", fontFamily:"'Outfit',sans-serif" }}/>
             <button onClick={()=>sendMessage()} disabled={loading} style={{ background:loading?"#f9fafb":"#059669", border:"none", color:loading?"#d1d5db":"#ffffff", borderRadius:10, padding:"9px 16px", cursor:loading?"default":"pointer", fontSize:16, transition:"all 0.15s", fontWeight:700 }}>→</button>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
